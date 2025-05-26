@@ -1,58 +1,58 @@
-import 'package:bloc/bloc.dart';
-import 'auth_state.dart';
-
-abstract class AuthEvent {}
-
-class LoginRequested extends AuthEvent {
-  final String username;
-  final String password;
-
-  LoginRequested({required this.username, required this.password});
-}
-
-class LogoutRequested extends AuthEvent {}
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:gym_management_app/blocs/auth/auth_event.dart';
+import 'package:gym_management_app/blocs/auth/auth_state.dart';
+import 'package:gym_management_app/repositories/auth_repository.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
-  AuthBloc() : super(const AuthState()) {
+  final AuthRepository authRepository;
+
+  AuthBloc({required this.authRepository}) : super(AuthInitial()) {
+    on<AppStarted>(_onAppStarted);
     on<LoginRequested>(_onLoginRequested);
+    on<RegisterRequested>(_onRegisterRequested);
     on<LogoutRequested>(_onLogoutRequested);
   }
 
-  Future<void> _onLoginRequested(
-    LoginRequested event,
-    Emitter<AuthState> emit,
-  ) async {
-    emit(state.copyWith(status: AuthStatus.loading));
-    try {
-      // TODO: Implement actual login logic with API
-      // Simulating successful login for now
-      await Future.delayed(const Duration(seconds: 1));
-      emit(state.copyWith(
-        status: AuthStatus.authenticated,
-        token: 'sample_token',
-      ));
-    } catch (e) {
-      emit(state.copyWith(
-        status: AuthStatus.failure,
-        errorMessage: e.toString(),
-      ));
+  Future<void> _onAppStarted(AppStarted event, Emitter<AuthState> emit) async {
+    final isAuthenticated = await authRepository.isAuthenticated();
+    if (isAuthenticated) {
+      emit(AuthAuthenticated());
+    } else {
+      emit(AuthUnauthenticated());
     }
   }
 
-  Future<void> _onLogoutRequested(
-    LogoutRequested event,
-    Emitter<AuthState> emit,
-  ) async {
-    emit(state.copyWith(status: AuthStatus.loading));
+  Future<void> _onLoginRequested(LoginRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
     try {
-      // TODO: Implement actual logout logic
-      await Future.delayed(const Duration(milliseconds: 300));
-      emit(const AuthState(status: AuthStatus.unauthenticated));
+      await authRepository.login(
+        phoneNumber: event.phoneNumber,
+        password: event.password,
+      );
+      emit(AuthAuthenticated());
     } catch (e) {
-      emit(state.copyWith(
-        status: AuthStatus.failure,
-        errorMessage: e.toString(),
-      ));
+      emit(AuthError(e.toString()));
     }
+  }
+
+  Future<void> _onRegisterRequested(RegisterRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    try {
+      await authRepository.register(
+        phoneNumber: event.phoneNumber,
+        password: event.password,
+        name: event.name,
+        email: event.email,
+      );
+      emit(AuthUnauthenticated()); // User needs to login after registration
+    } catch (e) {
+      emit(AuthError(e.toString()));
+    }
+  }
+
+  Future<void> _onLogoutRequested(LogoutRequested event, Emitter<AuthState> emit) async {
+    emit(AuthLoading());
+    await authRepository.deleteTokens();
+    emit(AuthUnauthenticated());
   }
 }
